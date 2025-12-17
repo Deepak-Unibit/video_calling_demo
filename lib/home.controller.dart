@@ -219,7 +219,8 @@ class HomeController {
     onStatusUpdate?.call();
     Logger().i("Ending call: $callId");
     SocketService.instance.socket?.emit(KeyConst.callEnd, {'callId': callId});
-
+    await _peerConnection?.close();
+    
     _timer.cancel();
     timeString = "";
     onTimerUpdate?.call();
@@ -231,7 +232,6 @@ class HomeController {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final now = DateTime.now().millisecondsSinceEpoch;
       final duration = Duration(milliseconds: now - startTimeStamp);
- 
 
       timeString = "${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}";
       onTimerUpdate?.call();
