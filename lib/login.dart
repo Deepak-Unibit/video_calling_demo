@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:video_calling_demo/auth.service.dart';
 
-class RegisterView extends StatefulWidget {
-  const RegisterView({super.key});
+class LoginView extends StatefulWidget {
+  const LoginView({super.key});
 
   @override
-  State<RegisterView> createState() => _RegisterViewState();
+  State<LoginView> createState() => _LoginViewState();
 }
 
-class _RegisterViewState extends State<RegisterView> {
+class _LoginViewState extends State<LoginView> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -26,7 +26,7 @@ class _RegisterViewState extends State<RegisterView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Register')),
+      appBar: AppBar(title: const Text('Login')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -63,7 +63,7 @@ class _RegisterViewState extends State<RegisterView> {
               TextFormField(
                 controller: _passwordController,
                 decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
-    
+               
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter a password';
@@ -78,10 +78,10 @@ class _RegisterViewState extends State<RegisterView> {
               ElevatedButton(
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
-                    Get.find<AuthService>().register(_usernameController.text, _emailController.text, _passwordController.text);
+                    Get.find<AuthService>().login(_usernameController.text, _emailController.text, _passwordController.text);
                   }
                 },
-                child: const Text('Register'),
+                child: const Text('Login'),
               ),
             ],
           ),

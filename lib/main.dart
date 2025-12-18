@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:video_calling_demo/home.dart';
+import 'package:video_calling_demo/landing.dart';
 import 'package:video_calling_demo/register.dart';
 
 import 'auth.service.dart';

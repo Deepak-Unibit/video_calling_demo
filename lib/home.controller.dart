@@ -1,6 +1,5 @@
 import 'dart:async';
-
-import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:logger/logger.dart';
 import 'package:video_calling_demo/api/key.const.dart';
@@ -12,23 +11,26 @@ class HomeController {
   RTCVideoRenderer localRenderer = RTCVideoRenderer();
   RTCVideoRenderer remoteRenderer = RTCVideoRenderer();
   Function? onRemoteStream;
-
+  String id = "";
   String callId = "";
   String timeString = "";
   late Timer _timer;
   Function? onTimerUpdate;
-  String statusString = "Ready to call";
+  String statusString = "";
   Function? onStatusUpdate;
+  String? incomingCallId;
+  Function? onIncomingCall;
+  Function? onCallEnded;
+
+  String targetUserId = "69425a3818b7ca50b9f1e662";
 
   List<RTCIceCandidate> candidateQueue = [];
-
-  final textEditingController = TextEditingController(text: "69425a3818b7ca50b9f1e662");
 
   Future<void> initializeRenderers() async {
     await localRenderer.initialize();
     await remoteRenderer.initialize();
 
-    _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+    _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': true});
     localRenderer.srcObject = _localStream;
 
     _peerConnection = await createPeerConnection({
@@ -47,14 +49,6 @@ class HomeController {
       }
     };
 
-    _peerConnection!.onIceCandidate = (candidate) {
-      // MATCHING IMAGE: call:ice-candidate
-      SocketService.instance.socket?.emit('call:ice-candidate', {
-        'candidate': candidate.toMap(),
-        'to': 'RECEIVER_ID', // You'll need the target user ID here
-      });
-    };
-
     SocketService.instance.getSocketConnection();
     _setupSocketListeners();
   }
@@ -62,26 +56,28 @@ class HomeController {
   void _setupSocketListeners() {
     final socket = SocketService.instance.socket;
 
+    socket?.on(KeyConst.callError, (data) {
+      statusString = "Call error: ${data['message']}";
+      onStatusUpdate?.call();
+    },);
+
     socket?.on(KeyConst.callRinging, (data) async {
-      Logger().i("Call is ringing... $data");
       statusString = "Ringing...";
       onStatusUpdate?.call();
     });
 
     // MATCHING IMAGE: Listen for incoming call
     socket?.on(KeyConst.callIncoming, (data) async {
-      Logger().i("Incoming call from: $data");
-      statusString = "Incoming call from data";
+      incomingCallId = data['callId'];
+      statusString = "Show Accept";
       onStatusUpdate?.call();
       ringingCall(data['callId']);
-      Future.delayed(Duration(seconds: 2), () {
-        acceptCall(data['callId']);
-      });
+      callId = data['callId'];
+      // acceptCall(data['callId']);
     });
 
     // MATCHING IMAGE: Listen for accepted call to start WebRTC
     socket?.on(KeyConst.callAccepted, (data) async {
-      Logger().i("Call accepted by remote. ${data} Creating offer...");
       bool isCaller = data['isCaller'] ?? false;
       statusString = "Call accepted";
       onStatusUpdate?.call();
@@ -119,11 +115,11 @@ class HomeController {
 
         // Ensure the type is exactly "offer" or "answer"
         RTCSessionDescription description = RTCSessionDescription(data['sdp'], 'answer');
-        Logger().i(description.toMap());
+  
         if (_peerConnection!.signalingState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
           await _peerConnection!.setRemoteDescription(description);
         } else {
-          Logger().w("Ignoring answer: signaling state is ${_peerConnection!.signalingState}");
+         
           return;
         }
 
@@ -131,21 +127,28 @@ class HomeController {
           await _peerConnection!.addCandidate(candidate);
         }
         candidateQueue.clear();
-        Logger().i(data);
+
         callId = data['callId'];
         statusString = "Call established";
         onStatusUpdate?.call();
       } on Exception catch (e) {
-        Logger().e("Error setting remote description: $e");
       }
     });
 
     socket?.on(KeyConst.callEnded, (data) async {
-      Logger().i("Call ended by remote.");
+      Logger().i("Call ended by remote");
       statusString = "Call ended";
       onStatusUpdate?.call();
       await _peerConnection?.close();
       _peerConnection = null;
+      if (_timer != null) {
+        _timer.cancel();
+      }
+      timeString = "";
+      callId = "";
+      incomingCallId = null;
+      onCallEnded?.call();
+      exit(0);
     });
 
     socket?.on(KeyConst.callIceCandidate, (data) async {
@@ -160,26 +163,31 @@ class HomeController {
   // --- ACTIONS ---
 
   // MATCHING IMAGE: Initiate Call
-  void initiateCall(String targetUserId) {
-    Logger().i("Initiating call to: $targetUserId");
+  void initiateCall() {
     statusString = "Calling $targetUserId";
     onStatusUpdate?.call();
     SocketService.instance.socket?.emit('call:initiate', {'calleeId': targetUserId});
   }
 
   void ringingCall(String callerId) {
-    Logger().i("Ringing call for: $callerId");
-    statusString = "Ringing...";
-    onStatusUpdate?.call();
+    print("${statusString}");
     SocketService.instance.socket?.emit(KeyConst.callRinging, {'callId': callerId});
   }
 
   // MATCHING IMAGE: Accept Call
   void acceptCall(String callId) {
-    Logger().i("Accepting call: $callId");
     statusString = "Accepting call...";
+    incomingCallId = null;
     onStatusUpdate?.call();
     SocketService.instance.socket?.emit(KeyConst.callAccept, {'callId': callId});
+  }
+
+  void declineCall(String callId) {
+    statusString = "Call declined";
+    incomingCallId = null;
+    onStatusUpdate?.call();
+    SocketService.instance.socket?.emit(KeyConst.callEnd, {'callId': callId});
+    onCallEnded?.call();
   }
 
   Future<void> _makeOffer(String callId) async {
@@ -187,13 +195,13 @@ class HomeController {
     onStatusUpdate?.call();
 
     Map<String, dynamic> constraints = {
-      'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': false},
+      'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': true},
       'optional': [],
     };
 
     RTCSessionDescription offer = await _peerConnection!.createOffer(constraints);
     await _peerConnection!.setLocalDescription(offer);
-    Logger().i(offer.toMap());
+    
     SocketService.instance.socket?.emit(KeyConst.callOffer, {"callId": callId, "sdp": offer.sdp, "type": offer.type});
 
     _peerConnection?.onIceCandidate = (candidate) {
@@ -206,26 +214,36 @@ class HomeController {
     onStatusUpdate?.call();
 
     Map<String, dynamic> constraints = {
-      'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': false},
+      'mandatory': {'OfferToReceiveAudio': true, 'OfferToReceiveVideo': true},
       'optional': [],
     };
     RTCSessionDescription answer = await _peerConnection!.createAnswer(constraints);
     await _peerConnection!.setLocalDescription(answer);
+    
+    statusString = "Call established";
+    onStatusUpdate?.call();
+
     SocketService.instance.socket?.emit(KeyConst.callAnswer, {"callId": callId, "sdp": answer.sdp, "type": answer.type});
   }
 
   Future<void> endCall() async {
     statusString = "Ending call...";
     onStatusUpdate?.call();
-    Logger().i("Ending call: $callId");
+
     SocketService.instance.socket?.emit(KeyConst.callEnd, {'callId': callId});
     await _peerConnection?.close();
-    
-    _timer.cancel();
+
+    if (_timer != null) {
+      _timer.cancel();
+    }
     timeString = "";
+    callId = "";
+    incomingCallId = null;
     onTimerUpdate?.call();
     statusString = "Call ended";
     onStatusUpdate?.call();
+    onCallEnded?.call();
+    exit(0);
   }
 
   void startCallTimer(int startTimeStamp) {

@@ -1,6 +1,6 @@
 class AppConst {
   static String authToken =
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTQyNWExNjE4YjdjYTUwYjlmMWU2NWYiLCJpYXQiOjE3NjU5NjA3MzcsImV4cCI6MTc2NjU2NTUzN30.G-NAg-hSd2WcYcHj0zmwo0tbCtt43etStk9AJxiEx3A";
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTQzYzBlNDhiNzU4ZTEwYTA1ZDJiMTgiLCJpYXQiOjE3NjYwNDc5NzIsImV4cCI6MTc2NjY1Mjc3Mn0.qCuDXy4nIsGiRxjjkqz0JHA-iBDGx-JhBz1g2zE0nrY";
   static String appVersion = "1.0.0";
   static String appVersionCode = "0.0.0";
   static String platform = "1";
