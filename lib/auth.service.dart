@@ -1,9 +1,8 @@
 import 'dart:convert';
-
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'package:logger/web.dart';
 import 'package:video_calling_demo/api/app.const.dart';
 import 'package:video_calling_demo/api/url.api.dart';
 import 'package:video_calling_demo/call.dart';
@@ -69,6 +68,18 @@ class AuthService {
       }
     } on Exception catch (e) {
       print('Login failed: $e');
+    }
+  }
+
+  Future<dynamic> getTurnCredentials() async {
+    try {
+      LoadingPage.show();
+      final response = await http.get(Uri.parse(UrlApi.turnCredentials), headers: {'Content-Type': 'application/json', 'Accept': 'application/json', 'authorization': 'Bearer ${AppConst.authToken}'});
+      LoadingPage.close();
+      Logger().i('TURN credentials fetched: ${response.body}');
+      return jsonDecode(response.body);
+    } catch (e) {
+      print('Error fetching TURN credentials: $e');
     }
   }
 }

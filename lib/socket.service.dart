@@ -1,12 +1,7 @@
 import 'dart:async';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:logger/logger.dart';
 import 'package:socket_io_client/socket_io_client.dart';
 import 'package:video_calling_demo/api/app.const.dart';
-import 'package:video_calling_demo/api/key.const.dart';
-import 'package:video_calling_demo/home.dart';
 
 class SocketService {
   static final SocketService _instance = SocketService._internal();
@@ -24,7 +19,7 @@ class SocketService {
     Logger().i('Establishing socket connection...');
 
     try {
-      socket = io('http://192.168.1.9:3000', OptionBuilder().setTransports(['websocket']).disableAutoConnect().enableReconnection().setAuth({'token': AppConst.authToken}).build());
+      socket = io(AppConst.baseUrl, OptionBuilder().setTransports(['websocket']).disableAutoConnect().enableReconnection().setAuth({'token': AppConst.authToken}).build());
       socket?.connect();
 
       socket?.on('connect', (_) {

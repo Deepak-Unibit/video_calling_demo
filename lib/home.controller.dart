@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:get/get.dart' hide navigator;
 import 'package:logger/logger.dart';
 import 'package:video_calling_demo/api/key.const.dart';
+import 'package:video_calling_demo/auth.service.dart';
 import 'package:video_calling_demo/socket.service.dart';
 
 class HomeController {
+  AuthService authService = Get.find<AuthService>();
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
   RTCVideoRenderer localRenderer = RTCVideoRenderer();
@@ -22,7 +25,7 @@ class HomeController {
   Function? onIncomingCall;
   Function? onCallEnded;
 
-  String targetUserId = "69425a3818b7ca50b9f1e662";
+  String targetUserId = "6943e3b1c11bec529932e670";
 
   List<RTCIceCandidate> candidateQueue = [];
 
@@ -33,10 +36,12 @@ class HomeController {
     _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': true});
     localRenderer.srcObject = _localStream;
 
+    var iceServers = await authService.getTurnCredentials();
+
+    Logger().i(iceServers);
+
     _peerConnection = await createPeerConnection({
-      'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-      ],
+      'iceServers': iceServers,
       'sdpSemantics': 'unified-plan',
     });
 
