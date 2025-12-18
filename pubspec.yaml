@@ -21,6 +21,8 @@ dependencies:
   http: ^1.6.0
   logger: ^2.6.2
   proximity_screen_lock: ^2.2.0
+  path_provider: ^2.1.5
+  video_player: ^2.8.0
 
   cupertino_icons: ^1.0.8
 

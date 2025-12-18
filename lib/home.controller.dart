@@ -1,11 +1,13 @@
 import 'dart:async';
-import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:get/get.dart' hide navigator;
 import 'package:logger/logger.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:video_calling_demo/api/key.const.dart';
 import 'package:video_calling_demo/auth.service.dart';
 import 'package:video_calling_demo/socket.service.dart';
+import 'package:video_calling_demo/video_player_screen.dart';
 
 class HomeController {
   AuthService authService = Get.find<AuthService>();
@@ -25,6 +27,9 @@ class HomeController {
   Function? onIncomingCall;
   Function? onCallEnded;
 
+  MediaRecorder? _mediaRecorder;
+  String? _recordingFilePath;
+
   String targetUserId = "6943e3b1c11bec529932e670";
 
   List<RTCIceCandidate> candidateQueue = [];
@@ -40,17 +45,19 @@ class HomeController {
 
     Logger().i(iceServers);
 
-    _peerConnection = await createPeerConnection({
-      'iceServers': iceServers,
-      'sdpSemantics': 'unified-plan',
-    });
+    _peerConnection = await createPeerConnection({'iceServers': iceServers, 'sdpSemantics': 'unified-plan'});
 
     _localStream!.getTracks().forEach((track) => _peerConnection!.addTrack(track, _localStream!));
 
     _peerConnection!.onTrack = (event) {
       if (event.streams.isNotEmpty) {
-        remoteRenderer.srcObject = event.streams[0];
+        final remoteStream = event.streams[0];
+        remoteRenderer.srcObject = remoteStream;
         onRemoteStream?.call();
+
+        remoteStream.getTracks().forEach((track) {
+          _localStream!.addTrack(track);
+        });
       }
     };
 
@@ -64,7 +71,7 @@ class HomeController {
     socket?.on(KeyConst.callError, (data) {
       statusString = "Call error: ${data['message']}";
       onStatusUpdate?.call();
-    },);
+    });
 
     socket?.on(KeyConst.callRinging, (data) async {
       statusString = "Ringing...";
@@ -120,11 +127,10 @@ class HomeController {
 
         // Ensure the type is exactly "offer" or "answer"
         RTCSessionDescription description = RTCSessionDescription(data['sdp'], 'answer');
-  
+
         if (_peerConnection!.signalingState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
           await _peerConnection!.setRemoteDescription(description);
         } else {
-         
           return;
         }
 
@@ -136,12 +142,12 @@ class HomeController {
         callId = data['callId'];
         statusString = "Call established";
         onStatusUpdate?.call();
-      } on Exception catch (e) {
-      }
+        await startRecording();
+      } on Exception catch (e) {}
     });
 
     socket?.on(KeyConst.callEnded, (data) async {
-      Logger().i("Call ended by remote");
+      await stopRecording();
       statusString = "Call ended";
       onStatusUpdate?.call();
       await _peerConnection?.close();
@@ -153,7 +159,8 @@ class HomeController {
       callId = "";
       incomingCallId = null;
       onCallEnded?.call();
-      exit(0);
+
+      // exit(0);
     });
 
     socket?.on(KeyConst.callIceCandidate, (data) async {
@@ -206,7 +213,7 @@ class HomeController {
 
     RTCSessionDescription offer = await _peerConnection!.createOffer(constraints);
     await _peerConnection!.setLocalDescription(offer);
-    
+
     SocketService.instance.socket?.emit(KeyConst.callOffer, {"callId": callId, "sdp": offer.sdp, "type": offer.type});
 
     _peerConnection?.onIceCandidate = (candidate) {
@@ -224,11 +231,12 @@ class HomeController {
     };
     RTCSessionDescription answer = await _peerConnection!.createAnswer(constraints);
     await _peerConnection!.setLocalDescription(answer);
-    
+
     statusString = "Call established";
     onStatusUpdate?.call();
 
     SocketService.instance.socket?.emit(KeyConst.callAnswer, {"callId": callId, "sdp": answer.sdp, "type": answer.type});
+    await startRecording();
   }
 
   Future<void> endCall() async {
@@ -248,7 +256,9 @@ class HomeController {
     statusString = "Call ended";
     onStatusUpdate?.call();
     onCallEnded?.call();
-    exit(0);
+
+    await stopRecording();
+    // exit(0);
   }
 
   void startCallTimer(int startTimeStamp) {
@@ -259,5 +269,25 @@ class HomeController {
       timeString = "${duration.inMinutes.remainder(60).toString().padLeft(2, '0')}:${duration.inSeconds.remainder(60).toString().padLeft(2, '0')}";
       onTimerUpdate?.call();
     });
+  }
+
+  Future<void> startRecording() async {
+    _mediaRecorder = MediaRecorder();
+
+    final directory = await getTemporaryDirectory();
+    _recordingFilePath = '${directory.path}/call_${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+    await _mediaRecorder!.start(_recordingFilePath!, videoTrack: localRenderer.srcObject!.getVideoTracks()[0], audioChannel: RecorderAudioChannel.INPUT);
+
+    Logger().i("Recording started: $_recordingFilePath");
+  }
+
+  Future<void> stopRecording() async {
+    if (_mediaRecorder != null) {
+      await _mediaRecorder!.stop();
+      Logger().i("Recording saved at: $_recordingFilePath");
+      _mediaRecorder = null;
+      Navigator.push(Get.context!, MaterialPageRoute(builder: (context) => VideoPlayerScreen(videoPath: _recordingFilePath!)));
+    }
   }
 }
