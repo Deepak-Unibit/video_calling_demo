@@ -12,58 +12,6 @@ import 'package:video_calling_demo/auth.service.dart';
 import 'package:video_calling_demo/socket.service.dart';
 import 'package:video_calling_demo/video_player_screen.dart';
 
-/// ============================================================================
-/// HomeController - WebRTC Call Management with Cross-Network Support
-/// ============================================================================
-///
-/// This controller manages the complete WebRTC call lifecycle with proper
-/// sequencing, media negotiation, and telemetry to support cross-network calls
-/// (WiFi ↔ Mobile) using TURN relay.
-///
-/// KEY FIX SUMMARY:
-/// ✓ [1] RTCPeerConnection initialized with STUN + TURN before any media ops
-/// ✓ [2] ALL event listeners (ICE, connection, track) attached BEFORE SDP
-/// ✓ [3] Media tracks acquired BEFORE offer creation (critical sequencing)
-/// ✓ [4] SDP validated for sendrecv and m=audio/m=video presence
-/// ✓ [5] Remote media rendered via ontrack handler with proper stream assignment
-/// ✓ [6] RTP stats monitored every 2 seconds to detect media flow
-/// ✓ [7] TURN relay-only mode (debugRelayOnly) for cross-network testing
-///
-/// CALL FLOW:
-/// 1. initializeRenderers()
-///    - Initialize video renderers
-///    - Get local media (audio + video)
-///    - Create peer connection with STUN + TURN
-///    - Attach ALL event listeners BEFORE adding tracks
-///    - Add local tracks to peer connection
-///    - Connect socket and listen for signaling events
-///
-/// 2. initiateCall() → callAccepted() → _makeOffer()
-///    - Caller creates offer after all listeners attached
-///    - Validates SDP contains sendrecv, m=audio, m=video
-///    - Sends offer via signaling
-///
-/// 3. callOffer() → _makeAnswer()
-///    - Callee receives offer, sets remote description
-///    - Creates answer, validates SDP
-///    - Sends answer via signaling
-///
-/// 4. callAnswer()
-///    - Caller receives answer, sets remote description
-///    - Starts RTP stats monitoring
-///    - Media should flow through TURN if cross-network
-///
-/// 5. onTrack event
-///    - Remote track received, remote stream assigned
-///    - Rendered immediately via remoteRenderer.srcObject
-///    - Audio/video should be audible/visible at this point
-///
-/// DEBUGGING:
-/// - Enable debugRelayOnly=true to force TURN-only connections
-/// - Check logs for [RTP-IN], [RTP-OUT] to see packet flow
-/// - [ICE] logs show candidate types (host, srflx, relay)
-/// - [SDP] logs show media direction negotiation
-///
 class HomeController {
   AuthService authService = Get.find<AuthService>();
   RTCPeerConnection? _peerConnection;
@@ -96,24 +44,15 @@ class HomeController {
 
   List<RTCIceCandidate> candidateQueue = [];
 
-  // === TURN Validation Mode ===
-  /// Set to true to force relay-only (TURN-only) connections for cross-network testing.
-  /// When enabled, all media MUST flow through TURN relay candidates.
-  /// Useful for diagnosing why media works on same network but fails cross-network.
   bool debugRelayOnly = false;
 
-  // === RTP Stats Timer ===
   Timer? _statsTimer;
   Map<String, dynamic> _lastStats = {};
 
   Future<void> initializeRenderers() async {
-    // [STEP 1] Initialize video renderers for local and remote streams
     await localRenderer.initialize();
     await remoteRenderer.initialize();
     Logger().i("[INIT] Video renderers initialized");
-
-    // [STEP 2] Acquire local media stream BEFORE creating peer connection
-    // This must happen first to capture all tracks for offer creation
     try {
       _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': true});
       localRenderer.srcObject = _localStream;
@@ -123,7 +62,6 @@ class HomeController {
       rethrow;
     }
 
-    // [STEP 3] Fetch TURN credentials from auth service
     List<Map<String, dynamic>> iceServers = [];
     try {
       final credentials = await authService.getTurnCredentials();
@@ -133,16 +71,13 @@ class HomeController {
       Logger().e("[ERROR] Failed to fetch TURN credentials: $e");
     }
 
-    // [STEP 4] Enhance ICE servers with STUN fallback and proper configuration
     final enhancedIceServers = _enhanceIceServers(iceServers);
     Logger().i("[ICE] Enhanced ICE servers config: $enhancedIceServers");
 
-    // [STEP 5] Create RTCPeerConnection with enhanced config
     try {
       final rtcConfig = {
         'iceServers': enhancedIceServers,
         'sdpSemantics': 'unified-plan',
-        // Set to 'relay' for TURN-only testing (debugRelayOnly mode)
         'iceTransportPolicy': debugRelayOnly ? 'relay' : 'all',
       };
 
@@ -153,11 +88,8 @@ class HomeController {
       rethrow;
     }
 
-    // [STEP 6] CRITICAL: Attach ALL event listeners BEFORE adding media or creating SDP
     _attachPeerConnectionListeners();
 
-    // [STEP 7] Add all local tracks to peer connection
-    // This MUST happen before creating an offer
     try {
       _localStream!.getTracks().forEach((track) {
         _peerConnection!.addTrack(track, _localStream!);
@@ -172,21 +104,17 @@ class HomeController {
       rethrow;
     }
 
-    // [STEP 8] Connect socket and set up signaling listeners
     SocketService.instance.getSocketConnection();
     _setupSocketListeners();
 
     Logger().i("[INIT] WebRTC initialization complete");
   }
 
-  /// Enhance ICE server configuration with STUN fallback and multiple TURN transports
   List<Map<String, dynamic>> _enhanceIceServers(List<Map<String, dynamic>> originalServers) {
     final enhanced = <Map<String, dynamic>>[];
 
-    // Always add Google STUN as primary
     enhanced.add({'urls': 'stun:stun.l.google.com:19302'});
 
-    // Add original TURN servers with enhanced transport options
     for (var server in originalServers) {
       if (server['urls'] != null) {
         enhanced.add(server);
@@ -196,14 +124,12 @@ class HomeController {
     return enhanced;
   }
 
-  /// Attach ALL event listeners to RTCPeerConnection before media operations
   void _attachPeerConnectionListeners() {
     if (_peerConnection == null) {
       Logger().e("[ERROR] Attempted to attach listeners to null peer connection");
       return;
     }
 
-    // [EVENT] ICE candidate discovered - send to remote peer
     _peerConnection!.onIceCandidate = (candidate) {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       Logger().i(
