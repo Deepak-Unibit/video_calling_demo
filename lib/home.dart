@@ -28,6 +28,10 @@ class _HomePageState extends State<HomePage> {
     controller.onCallEnded = () {
       if (mounted) Navigator.of(context).pop();
     };
+
+    controller.onIceCandidate = () {
+      if (mounted) setState(() {});
+    };
   }
 
   @override
@@ -38,6 +42,7 @@ class _HomePageState extends State<HomePage> {
         child: Stack(
           children: [
             Positioned.fill(child: RTCVideoView(controller.remoteRenderer)),
+            Text(controller.ice, style: TextStyle(color: Colors.white, fontSize: 14)),
             Align(
               alignment: Alignment.bottomRight,
               child: Container(
@@ -122,7 +127,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    controller.endCall();
+    // controller.endCall();
     super.dispose();
   }
 }

@@ -25,16 +25,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   Future<void> _initializeVideo() async {
     try {
-      _controller = VideoPlayerController.file(File(widget.videoPath));
+      final videoFile = File(widget.videoPath);
+      print('Attempting to play: ${widget.videoPath}');
+      print('File exists: ${await videoFile.exists()}');
+      print('File size: ${await videoFile.exists() ? await videoFile.length() : 0} bytes');
+
+      if (!await videoFile.exists()) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Video file not found: ${widget.videoPath}';
+        });
+        return;
+      }
+
+      if (await videoFile.length() == 0) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Video file is empty';
+        });
+        return;
+      }
+
+      _controller = VideoPlayerController.file(videoFile);
       await _controller.initialize();
       setState(() {
         _isLoading = false;
       });
       _controller.play();
     } catch (e) {
+      print('Video player error: $e');
       setState(() {
         _isLoading = false;
-        _errorMessage = 'Failed to load video: ${e.toString()}';
+        _errorMessage = 'Failed to load video: ${e.toString()}\n\nPath: ${widget.videoPath}';
       });
     }
   }
@@ -60,52 +82,55 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 textAlign: TextAlign.center,
               ),
             )
-          : Stack(
-              children: [
-                Center(
-                  child: AspectRatio(aspectRatio: _controller.value.aspectRatio, child: VideoPlayer(_controller)),
-                ),
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    color: Colors.black54,
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        VideoProgressIndicator(
-                          _controller,
-                          allowScrubbing: true,
-                          colors: VideoProgressColors(playedColor: Colors.green, bufferedColor: Colors.grey, backgroundColor: Colors.grey.withOpacity(0.3)),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            IconButton(
-                              icon: Icon(_controller.value.isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white),
-                              onPressed: () {
-                                setState(() {
-                                  _controller.value.isPlaying ? _controller.pause() : _controller.play();
-                                });
-                              },
-                            ),
-                            Text(
-                              '${_formatDuration(_controller.value.position)} / ${_formatDuration(_controller.value.duration)}',
-                              style: const TextStyle(color: Colors.white, fontSize: 12),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.fullscreen, color: Colors.white),
-                              onPressed: () {
-                                // Optional: implement full screen
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 30),
+              child: Stack(
+                children: [
+                  Center(
+                    child: AspectRatio(aspectRatio: _controller.value.aspectRatio, child: VideoPlayer(_controller)),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      color: Colors.black54,
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          VideoProgressIndicator(
+                            _controller,
+                            allowScrubbing: true,
+                            colors: VideoProgressColors(playedColor: Colors.green, bufferedColor: Colors.grey, backgroundColor: Colors.grey.withOpacity(0.3)),
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              IconButton(
+                                icon: Icon(_controller.value.isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white),
+                                onPressed: () {
+                                  setState(() {
+                                    _controller.value.isPlaying ? _controller.pause() : _controller.play();
+                                  });
+                                },
+                              ),
+                              Text(
+                                '${_formatDuration(_controller.value.position)} / ${_formatDuration(_controller.value.duration)}',
+                                style: const TextStyle(color: Colors.white, fontSize: 12),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.fullscreen, color: Colors.white),
+                                onPressed: () {
+                                  // Optional: implement full screen
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }
